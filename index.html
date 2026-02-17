@@ -1,0 +1,725 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Will You Be My Valentine?</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Pacifico&family=Quicksand:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        body {
+            font-family: 'Quicksand', sans-serif;
+            background-color: #ffe4e6;
+            overflow-x: hidden;
+            touch-action: manipulation;
+        }
+        
+        .font-handwriting {
+            font-family: 'Pacifico', cursive;
+        }
+
+        /* View Transitions */
+        .view-section {
+            display: none;
+            opacity: 0;
+            transition: opacity 0.5s ease-in-out;
+        }
+        .view-section.active {
+            display: flex;
+            opacity: 1;
+        }
+
+        /* Drag and Drop Styles */
+        .draggable-source {
+            cursor: grab;
+            transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1); /* Smoother transition */
+            touch-action: none;
+        }
+        
+        /* Fixed Hover Effect - Smoother and less "weird" */
+        .draggable-source:hover {
+            transform: scale(1.1); /* Subtle zoom instead of 1.5 */
+            z-index: 100;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.2), 0 4px 6px -2px rgba(0, 0, 0, 0.1);
+            border: 2px solid #fff;
+            /* Removed rotation */
+        }
+
+        .draggable-source:active { cursor: grabbing; transform: scale(1.05); z-index: 50; }
+        .draggable-source.dragging { opacity: 0.5; }
+        
+        .drop-zone {
+            transition: all 0.3s ease;
+            border: 2px dashed #f9a8d4;
+        }
+        .drop-zone.drag-over {
+            background-color: #fce7f3;
+            border-color: #ec4899;
+            transform: scale(1.05);
+        }
+        .drop-zone.filled {
+            border-style: solid;
+            background-color: #fff;
+        }
+
+        /* Confetti */
+        #confetti-canvas {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none; z-index: 9999;
+        }
+
+        /* Modals */
+        #custom-modal, #quiz-modal, #image-preview-modal {
+            transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275), opacity 0.3s;
+        }
+
+        /* Animations */
+        @keyframes heartbeat {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+            100% { transform: scale(1); }
+        }
+        .animate-heartbeat { animation: heartbeat 1.5s infinite; }
+        
+        .bg-hearts {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            z-index: -1; overflow: hidden;
+        }
+        .floating-heart {
+            position: absolute; color: rgba(236, 72, 153, 0.2);
+            animation: floatUp 10s linear infinite;
+        }
+        @keyframes floatUp {
+            0% { transform: translateY(100vh) scale(0.5); opacity: 0; }
+            100% { transform: translateY(-10vh) scale(1.5); opacity: 0; }
+        }
+
+        /* Music Button Pulse */
+        @keyframes musicPulse {
+            0% { box-shadow: 0 0 0 0 rgba(236, 72, 153, 0.7); }
+            70% { box-shadow: 0 0 0 10px rgba(236, 72, 153, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(236, 72, 153, 0); }
+        }
+        .music-active {
+            animation: musicPulse 2s infinite;
+        }
+    </style>
+</head>
+<body class="text-gray-800 min-h-screen flex flex-col">
+
+    <!-- Backgrounds -->
+    <div class="bg-hearts" id="bg-hearts"></div>
+    <canvas id="confetti-canvas"></canvas>
+
+    <!-- Hidden YouTube Player -->
+    <div id="music-player"></div>
+
+    <!-- Floating Music Button -->
+    <button id="music-toggle-btn" onclick="toggleMusic()" class="hidden fixed bottom-4 right-4 z-50 bg-pink-500 hover:bg-pink-600 text-white p-4 rounded-full shadow-xl transition-all transform hover:scale-110 flex items-center gap-2">
+        <i id="music-icon" class="fas fa-music text-xl"></i>
+        <span class="font-bold text-sm hidden md:inline">Play Music</span>
+    </button>
+
+    <!-- Image Preview Modal (Right Click) -->
+    <div id="image-preview-overlay" class="fixed inset-0 bg-black bg-opacity-90 z-[100] hidden flex items-center justify-center p-4" onclick="closeImagePreview()">
+        <div id="image-preview-modal" class="relative max-w-4xl w-full max-h-screen p-2 transform scale-90 opacity-0" onclick="event.stopPropagation()">
+            <button onclick="closeImagePreview()" class="absolute -top-10 right-0 text-white text-3xl hover:text-pink-500 transition">
+                <i class="fas fa-times"></i>
+            </button>
+            <img id="preview-modal-img" src="" class="w-full h-full max-h-[85vh] object-contain rounded-lg shadow-2xl bg-white" alt="Full Preview">
+            <p class="text-white text-center mt-4 text-sm opacity-75">Click outside or press X to close</p>
+        </div>
+    </div>
+
+    <!-- Quiz Result Modal (Correct/Wrong) -->
+    <div id="quiz-overlay" class="fixed inset-0 bg-black bg-opacity-80 z-50 hidden flex items-center justify-center p-4">
+        <div id="quiz-modal" class="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl text-center transform scale-90 opacity-0 relative">
+            <h3 class="text-2xl font-bold mb-4" id="quiz-modal-title"></h3>
+            
+            <div class="w-full h-48 md:h-64 bg-gray-100 rounded-lg mb-4 overflow-hidden flex items-center justify-center relative">
+                 <!-- Media Container -->
+                 <img id="quiz-modal-img" class="w-full h-full object-contain hidden" alt="Reaction">
+                 <div id="quiz-modal-video-container" class="hidden w-full h-full flex flex-col items-center justify-center p-1 bg-black text-white">
+                    <!-- Local Video Player -->
+                    <video id="quiz-modal-video" controls class="w-full h-full object-contain">
+                        <source src="" type="video/mp4">
+                        Your browser does not support the video tag.
+                    </video>
+                 </div>
+            </div>
+
+            <p class="text-lg font-handwriting text-pink-600 mb-6 text-xl" id="quiz-modal-caption"></p>
+            
+            <button id="quiz-action-btn" class="bg-pink-500 hover:bg-pink-600 text-white font-bold py-3 px-8 rounded-full shadow-lg transition-transform transform hover:scale-105">
+                Continue
+            </button>
+        </div>
+    </div>
+
+    <!-- System Error Modal (Proposal) -->
+    <div id="error-overlay" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden flex items-center justify-center p-4">
+        <div id="custom-modal" class="bg-white rounded-2xl p-6 max-w-sm w-full shadow-2xl text-center transform scale-90 opacity-0">
+            <div class="text-5xl mb-4">⚠️</div>
+            <h3 class="text-xl font-bold text-pink-600 mb-2" id="modal-title">System Error</h3>
+            <p class="text-gray-600 mb-6" id="modal-message">Something went wrong.</p>
+            <button onclick="closeErrorModal()" class="bg-pink-500 hover:bg-pink-600 text-white font-bold py-2 px-6 rounded-full transition-colors">
+                Okay, I'll try again
+            </button>
+        </div>
+    </div>
+
+    <main class="flex-grow flex items-center justify-center p-4 relative w-full max-w-2xl mx-auto">
+        
+        <!-- View 1: Welcome -->
+        <div id="view-welcome" class="view-section active flex-col items-center text-center w-full">
+            <h1 class="text-5xl md:text-6xl font-handwriting text-pink-600 mb-6 animate-heartbeat">Hey Beautiful!</h1>
+            <p class="text-lg md:text-xl text-gray-700 mb-8 max-w-md">
+                I made a little something special for us. Are you ready?
+            </p>
+            <button onclick="nextView('view-quiz')" class="bg-white text-pink-600 border-2 border-pink-500 hover:bg-pink-50 font-bold py-3 px-8 rounded-full shadow-lg transition-all transform hover:scale-105">
+                Let's Go! <i class="fas fa-arrow-right ml-2"></i>
+            </button>
+        </div>
+
+        <!-- View 2: Quiz -->
+        <div id="view-quiz" class="view-section flex-col items-center w-full">
+            <div class="w-full bg-white rounded-2xl shadow-xl p-6 md:p-8">
+                <div class="mb-4 text-center">
+                    <span class="bg-pink-100 text-pink-600 text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wide">Question 1</span>
+                </div>
+                <h2 class="text-2xl font-bold text-center mb-6">What was our best creation?</h2>
+                
+                <!-- Frame automatically matches image size (h-auto) -->
+                <div class="w-full bg-gray-200 rounded-xl mb-6 flex items-center justify-center overflow-hidden border-4 border-pink-100">
+                    <img src="desplay/First page image.jpg" 
+                         onerror="this.onerror=null; this.src='https://placehold.co/600x400/pink/white?text=Image+Not+Found';"
+                         alt="Question Photo" class="w-full h-auto block">
+                </div>
+
+                <div class="space-y-3">
+                    <button onclick="checkAnswer('mario')" class="w-full block bg-gray-50 hover:bg-gray-100 border border-gray-200 text-gray-700 font-semibold py-3 px-4 rounded-xl text-left transition-colors">
+                        A) Mario pot
+                    </button>
+                    <button onclick="checkAnswer('wrong')" class="w-full block bg-gray-50 hover:bg-gray-100 border border-gray-200 text-gray-700 font-semibold py-3 px-4 rounded-xl text-left transition-colors">
+                        B) The bunny
+                    </button>
+                    <button onclick="checkAnswer('wrong')" class="w-full block bg-gray-50 hover:bg-gray-100 border border-gray-200 text-gray-700 font-semibold py-3 px-4 rounded-xl text-left transition-colors">
+                        C) That burnt toast structure
+                    </button>
+                    <button onclick="checkAnswer('wrong')" class="w-full block bg-gray-50 hover:bg-gray-100 border border-gray-200 text-gray-700 font-semibold py-3 px-4 rounded-xl text-left transition-colors">
+                        D) The unfinished puzzle tower
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- View 3: Ranking -->
+        <div id="view-rank" class="view-section flex-col items-center w-full">
+            <h2 class="text-2xl font-bold text-center text-pink-600 mb-2">Rank Top 3 Memories</h2>
+            <p class="text-sm text-gray-500 mb-4 text-center">Drag to rank! Right-click to zoom.</p>
+            
+            <!-- Drop Zones -->
+            <div class="flex justify-center gap-2 md:gap-4 mb-6 w-full">
+                <div class="drop-zone w-24 h-32 md:w-32 md:h-40 bg-pink-50 rounded-lg flex flex-col items-center justify-center relative" data-slot="1">
+                    <span class="text-pink-300 font-bold text-2xl absolute opacity-30 pointer-events-none">1st</span>
+                </div>
+                <div class="drop-zone w-24 h-32 md:w-32 md:h-40 bg-pink-50 rounded-lg flex flex-col items-center justify-center relative" data-slot="2">
+                    <span class="text-pink-300 font-bold text-2xl absolute opacity-30 pointer-events-none">2nd</span>
+                </div>
+                <div class="drop-zone w-24 h-32 md:w-32 md:h-40 bg-pink-50 rounded-lg flex flex-col items-center justify-center relative" data-slot="3">
+                    <span class="text-pink-300 font-bold text-2xl absolute opacity-30 pointer-events-none">3rd</span>
+                </div>
+            </div>
+
+            <!-- Draggable Pool -->
+            <div class="w-full bg-white rounded-2xl shadow-xl p-4 overflow-visible"> <!-- Overflow visible for hover effect -->
+                <div class="flex overflow-x-auto gap-3 pb-8 pt-4 px-2 snap-x" id="draggable-pool" style="overflow-y: visible;">
+                    <!-- Images will be injected here via JS -->
+                </div>
+            </div>
+
+            <button id="rank-continue-btn" onclick="nextView('view-videos')" class="mt-6 bg-gray-300 text-white font-bold py-3 px-8 rounded-full transition-all transform scale-95 pointer-events-none">
+                Rank 3 to Continue
+            </button>
+        </div>
+
+        <!-- View 4: Video Gift -->
+        <div id="view-videos" class="view-section flex-col items-center text-center w-full">
+            <h2 class="text-3xl font-handwriting text-pink-600 mb-6">A Couple More Memories...</h2>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 w-full mb-8">
+                <!-- Video 1 -->
+                <div class="bg-white p-4 rounded-xl shadow-lg flex flex-col items-center">
+                    <div class="w-full bg-gray-100 rounded-lg overflow-hidden mb-3">
+                        <video controls class="w-full h-40 object-cover">
+                            <source src="desplay/Reward 1.MOV" type="video/mp4">
+                            <source src="desplay/Reward 1.MOV" type="video/quicktime">
+                            Your browser does not support video.
+                        </video>
+                    </div>
+                    <p class="font-bold text-gray-700">Special Memory 1</p>
+                </div>
+
+                <!-- Video 2 -->
+                <div class="bg-white p-4 rounded-xl shadow-lg flex flex-col items-center">
+                    <div class="w-full bg-gray-100 rounded-lg overflow-hidden mb-3">
+                        <video controls class="w-full h-40 object-cover">
+                            <source src="desplay/Reward 2.MOV" type="video/mp4">
+                            <source src="desplay/Reward 2.MOV" type="video/quicktime">
+                            Your browser does not support video.
+                        </video>
+                    </div>
+                    <p class="font-bold text-gray-700">Special Memory 2</p>
+                </div>
+            </div>
+
+            <button onclick="nextView('view-proposal')" class="bg-gradient-to-r from-pink-400 to-pink-600 text-white font-bold py-3 px-10 rounded-full shadow-lg hover:scale-105 transition-transform">
+                One Last Question... <i class="fas fa-heart ml-2"></i>
+            </button>
+        </div>
+
+        <!-- View 6: The Proposal -->
+        <div id="view-proposal" class="view-section flex-col items-center text-center w-full relative">
+            <div class="bg-white bg-opacity-90 rounded-3xl p-8 md:p-12 shadow-2xl backdrop-blur-sm border-4 border-pink-200">
+                <div class="text-6xl mb-4 animate-bounce">💍</div>
+                <h1 class="text-4xl md:text-5xl font-handwriting text-red-500 mb-6">Will you be my Valentine?</h1>
+                <p class="text-gray-600 mb-8 italic">You make every day brighter just by being you.</p>
+                
+                <div class="flex flex-col md:flex-row gap-4 justify-center items-center relative h-20 md:h-auto">
+                    <button onclick="acceptProposal()" class="bg-green-500 hover:bg-green-600 text-white font-bold py-4 px-10 rounded-full shadow-lg text-xl transition-transform transform hover:scale-110 z-10">
+                        YES! 😍
+                    </button>
+                    
+                    <button id="no-btn" onmouseover="moveButton()" onclick="handleNoClick()" class="bg-gray-300 hover:bg-gray-400 text-gray-700 font-bold py-4 px-10 rounded-full shadow-lg text-xl transition-all duration-200 z-10 md:static absolute">
+                        No 😢
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- View 7: Success -->
+        <div id="view-success" class="view-section flex-col items-center text-center w-full z-20">
+            <div class="bg-white/80 backdrop-blur-md p-8 md:p-12 rounded-3xl shadow-2xl border-4 border-pink-300 max-w-lg mx-4">
+                <h1 class="text-5xl md:text-6xl font-handwriting text-red-600 mb-6 animate-pulse">She said YES! ❤️</h1>
+                
+                <div class="w-40 h-40 mx-auto bg-pink-100 rounded-full flex items-center justify-center overflow-hidden border-4 border-pink-500 shadow-lg mb-6">
+                    <!-- Reusing the first image as a profile/couple bubble -->
+                    <img src="desplay/First page image.jpg" 
+                         onerror="this.src='https://placehold.co/200x200/pink/white?text=Love';"
+                         class="w-full h-full object-cover">
+                </div>
+
+                <p class="text-xl md:text-2xl text-gray-800 font-bold mb-4">
+                    You've made me the happiest person alive!
+                </p>
+                
+                <p class="text-gray-600 mb-8 leading-relaxed italic">
+                    "Every love story is beautiful, but ours is my favorite. Thank you for being my Valentine, today and always."
+                </p>
+                
+                <div class="flex justify-center gap-4 text-4xl animate-heartbeat">
+                    <span>🥰</span>
+                    <span>💑</span>
+                    <span>💖</span>
+                </div>
+                
+                <div class="mt-8 pt-6 border-t border-pink-200">
+                    <p class="text-pink-600 font-handwriting text-2xl">I love you endlessly!</p>
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- YouTube API Script -->
+    <script src="https://www.youtube.com/iframe_api"></script>
+
+    <script>
+        // --- Music Player Logic ---
+        var player;
+        function onYouTubeIframeAPIReady() {
+            player = new YT.Player('music-player', {
+                height: '0',
+                width: '0',
+                playerVars: {
+                    'listType': 'playlist',
+                    'playlist': 'i1o1p_DD6TU,0v5eHPfy5Lk,orYf6VDtj_k,Zo0qkiShiAI',
+                    'autoplay': 0,
+                    'loop': 1,
+                    'playsinline': 1
+                },
+                events: {
+                    'onReady': onPlayerReady
+                }
+            });
+        }
+
+        function onPlayerReady(event) {
+            document.getElementById('music-toggle-btn').classList.remove('hidden');
+        }
+
+        function toggleMusic() {
+            const btn = document.getElementById('music-toggle-btn');
+            const icon = document.getElementById('music-icon');
+            const state = player.getPlayerState();
+
+            if (state === 1) { // Playing
+                player.pauseVideo();
+                icon.classList.remove('fa-pause');
+                icon.classList.add('fa-music');
+                btn.classList.remove('music-active');
+            } else { // Paused
+                player.playVideo();
+                icon.classList.remove('fa-music');
+                icon.classList.add('fa-pause');
+                btn.classList.add('music-active');
+            }
+        }
+
+        // --- Navigation ---
+        function nextView(viewId) {
+            document.querySelectorAll('.view-section').forEach(el => {
+                el.classList.remove('active');
+                setTimeout(() => { if(!el.classList.contains('active')) el.style.display = 'none'; }, 500);
+            });
+            const target = document.getElementById(viewId);
+            target.style.display = 'flex';
+            setTimeout(() => target.classList.add('active'), 50);
+
+            if(viewId === 'view-rank') initRankImages();
+        }
+
+        // --- Quiz Logic ---
+        function checkAnswer(answer) {
+            const overlay = document.getElementById('quiz-overlay');
+            const modal = document.getElementById('quiz-modal');
+            const title = document.getElementById('quiz-modal-title');
+            const img = document.getElementById('quiz-modal-img');
+            const vidContainer = document.getElementById('quiz-modal-video-container');
+            const vidPlayer = document.getElementById('quiz-modal-video');
+            const caption = document.getElementById('quiz-modal-caption');
+            const actionBtn = document.getElementById('quiz-action-btn');
+
+            overlay.classList.remove('hidden');
+            setTimeout(() => {
+                modal.classList.remove('scale-90', 'opacity-0');
+                modal.classList.add('scale-100', 'opacity-100');
+            }, 10);
+
+            if (answer === 'mario') {
+                // Correct
+                title.innerText = "Correct! 🎉";
+                title.className = "text-2xl font-bold mb-4 text-green-600";
+                
+                img.classList.add('hidden');
+                vidContainer.classList.remove('hidden');
+                
+                vidPlayer.src = "desplay/Reward 3.MP4"; 
+                vidPlayer.play().catch(e => console.log("Auto-play prevented"));
+
+                caption.innerText = "My memory before giving amazon interviews";
+                
+                actionBtn.innerText = "Continue to Ranking";
+                actionBtn.onclick = () => {
+                    vidPlayer.pause();
+                    closeQuizModal();
+                    setTimeout(() => nextView('view-rank'), 300);
+                };
+            } else {
+                // Wrong
+                title.innerText = "Wrong! 😱";
+                title.className = "text-2xl font-bold mb-4 text-red-600";
+                
+                img.src = "desplay/Wrong answer meme.jpg";
+                img.classList.remove('hidden');
+                vidContainer.classList.add('hidden');
+                vidPlayer.pause();
+                
+                caption.innerText = "Seriously babu";
+                
+                actionBtn.innerText = "Try Again";
+                actionBtn.onclick = closeQuizModal;
+            }
+        }
+
+        function closeQuizModal() {
+            const overlay = document.getElementById('quiz-overlay');
+            const modal = document.getElementById('quiz-modal');
+            modal.classList.remove('scale-100', 'opacity-100');
+            modal.classList.add('scale-90', 'opacity-0');
+            setTimeout(() => overlay.classList.add('hidden'), 300);
+        }
+
+        // --- Ranking Logic (Drag & Drop) ---
+        const photoLinks = [
+            "desplay/2nd page 1.jpg",
+            "desplay/2nd page 2.jpg",
+            "desplay/2nd page 3.png", 
+            "desplay/2nd page 4.jpg",
+            "desplay/2nd page 5.jpg",
+            "desplay/2nd page 6.jpg",
+            "desplay/2nd page 7.jpg",
+            "desplay/2nd page 8.jpg",
+            "desplay/2nd page 9.jpg",
+            "desplay/2nd page 10.jpg",
+            "desplay/2nd page 11.jpg",
+            "desplay/2nd page 12.jpg",
+            "desplay/2nd page 13.jpg",
+            "desplay/2nd page 14.jpg",
+            "desplay/2nd page 15.jpg",
+            "desplay/2nd page 16.jpg",
+            "desplay/2nd page 17.jpg"
+        ];
+
+        function initRankImages() {
+            const pool = document.getElementById('draggable-pool');
+            if (pool.children.length > 0) return; 
+
+            photoLinks.forEach((link, i) => {
+                const div = document.createElement('div');
+                div.className = 'draggable-source w-24 h-24 md:w-32 md:h-32 flex-shrink-0 bg-gray-200 rounded-lg overflow-hidden relative shadow-md transition-all duration-300';
+                div.draggable = true;
+                div.id = `drag-img-${i}`;
+                
+                // Set context menu event
+                div.oncontextmenu = function(e) {
+                    e.preventDefault();
+                    showImagePreview(link);
+                };
+                
+                // Added title tooltip
+                div.title = "Right-click to zoom, Drag to rank";
+
+                div.innerHTML = `<img src="${link}" class="w-full h-full object-cover pointer-events-none" onerror="this.src='https://placehold.co/100x100/pink/white?text=Img+${i+1}'">`;
+                
+                addDragEvents(div);
+                pool.appendChild(div);
+            });
+        }
+
+        // --- Image Preview Logic (Right Click) ---
+        function showImagePreview(src) {
+            const overlay = document.getElementById('image-preview-overlay');
+            const modal = document.getElementById('image-preview-modal');
+            const img = document.getElementById('preview-modal-img');
+            
+            img.src = src;
+            overlay.classList.remove('hidden');
+            setTimeout(() => {
+                modal.classList.remove('scale-90', 'opacity-0');
+                modal.classList.add('scale-100', 'opacity-100');
+            }, 10);
+        }
+
+        function closeImagePreview() {
+            const overlay = document.getElementById('image-preview-overlay');
+            const modal = document.getElementById('image-preview-modal');
+            
+            modal.classList.remove('scale-100', 'opacity-100');
+            modal.classList.add('scale-90', 'opacity-0');
+            setTimeout(() => overlay.classList.add('hidden'), 300);
+        }
+
+
+        // ... existing drag & drop logic ...
+        let activeDrag = null;
+        let startX, startY;
+        let originalParent = null;
+
+        function addDragEvents(el) {
+            el.addEventListener('touchstart', handleTouchStart, {passive: false});
+            el.addEventListener('touchmove', handleTouchMove, {passive: false});
+            el.addEventListener('touchend', handleTouchEnd);
+            el.addEventListener('dragstart', (e) => {
+                e.dataTransfer.setData('text/plain', e.target.id);
+                e.target.classList.add('dragging');
+            });
+            el.addEventListener('dragend', (e) => {
+                e.target.classList.remove('dragging');
+                checkRankingComplete();
+            });
+        }
+
+        document.querySelectorAll('.drop-zone').forEach(zone => {
+            zone.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                zone.classList.add('drag-over');
+            });
+            zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
+            zone.addEventListener('drop', (e) => {
+                e.preventDefault();
+                zone.classList.remove('drag-over');
+                const id = e.dataTransfer.getData('text/plain');
+                const el = document.getElementById(id);
+                if (el) handleDrop(el, zone);
+            });
+            zone.addEventListener('click', (e) => {
+                if(zone.children.length > 1) {
+                    const imgDiv = zone.querySelector('.draggable-source');
+                    if(imgDiv) {
+                        document.getElementById('draggable-pool').appendChild(imgDiv);
+                        imgDiv.style.position = 'static';
+                        imgDiv.style.width = ''; 
+                        imgDiv.style.height = '';
+                        zone.classList.remove('filled');
+                        checkRankingComplete();
+                    }
+                }
+            });
+        });
+
+        function handleTouchStart(e) {
+            e.preventDefault();
+            activeDrag = e.currentTarget;
+            originalParent = activeDrag.parentElement;
+            const touch = e.touches[0];
+            const rect = activeDrag.getBoundingClientRect();
+            activeDrag.style.position = 'fixed';
+            activeDrag.style.width = rect.width + 'px';
+            activeDrag.style.height = rect.height + 'px';
+            activeDrag.style.left = rect.left + 'px';
+            activeDrag.style.top = rect.top + 'px';
+            activeDrag.style.zIndex = 1000;
+            activeDrag.classList.add('dragging');
+            startX = touch.clientX - rect.left;
+            startY = touch.clientY - rect.top;
+        }
+
+        function handleTouchMove(e) {
+            if (!activeDrag) return;
+            e.preventDefault();
+            const touch = e.touches[0];
+            activeDrag.style.left = (touch.clientX - startX) + 'px';
+            activeDrag.style.top = (touch.clientY - startY) + 'px';
+        }
+
+        function handleTouchEnd(e) {
+            if (!activeDrag) return;
+            activeDrag.classList.remove('dragging');
+            activeDrag.style.zIndex = '';
+            const zones = document.querySelectorAll('.drop-zone');
+            let dropped = false;
+            const rect = activeDrag.getBoundingClientRect();
+            const center = { x: rect.left + rect.width/2, y: rect.top + rect.height/2 };
+            zones.forEach(zone => {
+                const zRect = zone.getBoundingClientRect();
+                if (center.x >= zRect.left && center.x <= zRect.right &&
+                    center.y >= zRect.top && center.y <= zRect.bottom) {
+                    handleDrop(activeDrag, zone);
+                    dropped = true;
+                }
+            });
+            if (!dropped) {
+                document.getElementById('draggable-pool').appendChild(activeDrag);
+                resetStyles(activeDrag);
+            }
+            activeDrag = null;
+        }
+
+        function handleDrop(element, zone) {
+            const existing = zone.querySelector('.draggable-source');
+            if (existing) {
+                document.getElementById('draggable-pool').appendChild(existing);
+                resetStyles(existing);
+                zone.classList.remove('filled');
+            }
+            zone.appendChild(element);
+            zone.classList.add('filled');
+            element.style.position = 'absolute';
+            element.style.top = '0';
+            element.style.left = '0';
+            element.style.width = '100%';
+            element.style.height = '100%';
+            element.style.borderRadius = '0.5rem';
+            checkRankingComplete();
+        }
+
+        function resetStyles(el) {
+            el.style.position = 'static';
+            el.style.width = ''; 
+            el.style.height = ''; 
+            el.style.left = '';
+            el.style.top = '';
+        }
+
+        function checkRankingComplete() {
+            const filled = document.querySelectorAll('.drop-zone.filled').length;
+            const btn = document.getElementById('rank-continue-btn');
+            if (filled === 3) {
+                btn.classList.remove('bg-gray-300', 'pointer-events-none', 'scale-95');
+                btn.classList.add('bg-pink-500', 'hover:bg-pink-600', 'shadow-lg', 'scale-100');
+            } else {
+                btn.classList.add('bg-gray-300', 'pointer-events-none', 'scale-95');
+                btn.classList.remove('bg-pink-500', 'hover:bg-pink-600', 'shadow-lg', 'scale-100');
+            }
+        }
+
+        // --- Proposal Logic ---
+        let noClickCount = 0;
+        function moveButton() {
+            if (noClickCount < 2) return;
+            const btn = document.getElementById('no-btn');
+            const container = document.getElementById('view-proposal');
+            const rect = container.getBoundingClientRect();
+            const newX = Math.random() * (rect.width - 100); 
+            const newY = Math.random() * (rect.height - 50);
+            btn.style.position = 'absolute';
+            btn.style.left = `${newX}px`;
+            btn.style.top = `${newY}px`;
+        }
+
+        function handleNoClick() {
+            noClickCount++;
+            const messages = ["I think you clicked the wrong button! 😉", "Think about all the good times! Try again.", "Refusal module not found.", "Love.exe cannot be stopped.", "This button is broken."];
+            showErrorModal("Oops!", messages[Math.min(noClickCount-1, messages.length-1)]);
+            moveButton();
+        }
+
+        function showErrorModal(title, message) {
+            const overlay = document.getElementById('error-overlay');
+            const modal = document.getElementById('custom-modal');
+            document.getElementById('modal-title').innerText = title;
+            document.getElementById('modal-message').innerText = message;
+            overlay.classList.remove('hidden');
+            setTimeout(() => { modal.classList.remove('scale-90', 'opacity-0'); modal.classList.add('scale-100', 'opacity-100'); }, 10);
+        }
+
+        function closeErrorModal() {
+            const overlay = document.getElementById('error-overlay');
+            const modal = document.getElementById('custom-modal');
+            modal.classList.remove('scale-100', 'opacity-100'); modal.classList.add('scale-90', 'opacity-0');
+            setTimeout(() => overlay.classList.add('hidden'), 300);
+        }
+
+        function acceptProposal() {
+            nextView('view-success');
+            startConfetti();
+        }
+
+        function startConfetti() {
+            const canvas = document.getElementById('confetti-canvas');
+            const ctx = canvas.getContext('2d');
+            canvas.width = window.innerWidth; canvas.height = window.innerHeight;
+            const particles = [];
+            for (let i = 0; i < 200; i++) particles.push({
+                x: Math.random() * canvas.width, y: Math.random() * canvas.height - canvas.height,
+                size: Math.random() * 10 + 5, color: ['#ec4899', '#ef4444', '#f472b6', '#ffffff'][Math.floor(Math.random()*4)],
+                speed: Math.random() * 3 + 2, angle: Math.random() * 6.28, spin: Math.random() * 0.2 - 0.1
+            });
+            function draw() {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                particles.forEach(p => {
+                    ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.angle);
+                    ctx.fillStyle = p.color; ctx.fillRect(-p.size/2, -p.size/2, p.size, p.size); ctx.restore();
+                    p.y += p.speed; p.angle += p.spin;
+                    if (p.y > canvas.height) { p.y = -20; p.x = Math.random() * canvas.width; }
+                });
+                requestAnimationFrame(draw);
+            }
+            draw();
+        }
+    </script>
+</body>
+</html>
